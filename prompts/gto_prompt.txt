@@ -1,0 +1,5 @@
+# GTO Agent Prompt
+
+This agent does not use LLM prompting - it uses algorithmic GTO strategy.
+
+See kuhn_poker/gto_strategy.py for implementation details.

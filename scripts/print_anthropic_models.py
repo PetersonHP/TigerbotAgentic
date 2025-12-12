@@ -1,0 +1,11 @@
+import anthropic
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+models = client.models.list()
+
+for model in models.data:
+    print(model.id)
