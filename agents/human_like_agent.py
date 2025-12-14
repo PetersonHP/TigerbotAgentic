@@ -2,8 +2,10 @@
 
 import json
 import os
+import re
 from typing import List, Optional
 from dotenv import load_dotenv
+from anthropic import Anthropic
 from .base_agent import BaseAgent
 from .llm_logger import LLMLogger
 from kuhn_poker.state import GameState
@@ -37,18 +39,14 @@ class HumanLikeAgent(BaseAgent):
         # Initialize LLM logger
         self.logger = LLMLogger(agent_name=name)
 
-        try:
-            from anthropic import Anthropic
-            # Get API key from parameter or environment variable
-            if not api_key:
-                api_key = os.getenv('ANTHROPIC_API_KEY')
-            if not api_key:
-                raise ValueError(
-                    "API key required. Provide via api_key parameter or set ANTHROPIC_API_KEY environment variable."
-                )
-            self.client = Anthropic(api_key=api_key)
-        except ImportError:
-            raise ImportError("anthropic package required. Install with: pip install anthropic")
+        # Get API key from parameter or environment variable
+        if not api_key:
+            api_key = os.getenv('ANTHROPIC_API_KEY')
+        if not api_key:
+            raise ValueError(
+                "API key required. Provide via api_key parameter or set ANTHROPIC_API_KEY environment variable."
+            )
+        self.client = Anthropic(api_key=api_key)
 
     def choose_action(self, state: GameState, legal_actions: List[str], player_position: int) -> str:
         """Choose action with human-like biases using Claude API.
@@ -134,27 +132,18 @@ Your response:"""
                 }
             )
 
-            # Try to parse JSON
+            # Try to parse JSON - search for JSON object pattern
             try:
-                # Strip markdown code blocks if present
-                json_text = response_text
-                if json_text.startswith('```'):
-                    # Remove opening ```json or ```
-                    lines = json_text.split('\n')
-                    if lines[0].startswith('```'):
-                        lines = lines[1:]
-                    # Remove closing ```
-                    if lines and lines[-1].strip() == '```':
-                        lines = lines[:-1]
-                    json_text = '\n'.join(lines).strip()
+                # Find JSON object in response (handles markdown fences, extra text, etc.)
+                match = re.search(r'\{.*?\}', response_text, re.DOTALL)
+                if match:
+                    result = json.loads(match.group(0))
+                    action = result.get('action', '').upper()
 
-                result = json.loads(json_text)
-                action = result.get('action', '').upper()
-
-                # Validate action
-                if action in legal_actions:
-                    return action
-            except json.JSONDecodeError:
+                    # Validate action
+                    if action in legal_actions:
+                        return action
+            except (json.JSONDecodeError, AttributeError):
                 pass
 
             # Fallback to first legal action if parsing fails
